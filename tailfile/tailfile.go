@@ -2,17 +2,26 @@ package tailfile
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/hpcloud/tail"
 	"github.com/sirupsen/logrus"
 	"logagent/kafka"
+	"logagent/utils"
 	"os"
 )
 
 // tail line from log file
 var (
 	log *logrus.Logger
+	localIP string
 )
+
+
+type LogData struct {
+	IP string `json:"ip"`
+	Data string `json:"data"`
+}
 
 func init() {
 	log = logrus.New()
@@ -28,6 +37,11 @@ func init() {
 	// }
 
 	log.Info("etcd:init log success")
+	var err error
+	localIP, err = utils.GetOutboundIP()
+	if err != nil {
+		log.Errorf("get local ip failed,err:%v", err)
+	}
 }
 
 type tailObj struct {
@@ -80,11 +94,19 @@ func (t *tailObj) run() {
 				log.Errorf("read line failed")
 				continue
 			}
+			data := &LogData{
+				IP:localIP,
+				Data: line.Text,
+			}
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				log.Warningf("unmarshal tailfile.LodData failed, err:%v", err)
+			}
 			msg := &kafka.Message{
-				Line:  line.Text,
+				Data:  string(jsonData),
 				Topic: t.topic, // 先写死
 			}
-			err := kafka.SendLog(msg)
+			err = kafka.SendLog(msg)
 			if err != nil {
 				log.Errorf("send to kafka failed, err:%v\n", err)
 			}

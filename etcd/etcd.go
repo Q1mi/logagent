@@ -46,7 +46,6 @@ func Init(address []string, key string) (err error) {
 		return
 	}
 	confChan = make(chan []*common.CollectEntry)
-	go watchConf(key) // 开始watch etcd中的日志配置项变化
 	return
 }
 
@@ -73,7 +72,31 @@ func GetConf(key string) (conf []*common.CollectEntry, err error) {
 	return
 }
 
-func watchConf(key string) {
+func GetSysinfoConf(key string) (conf *common.CollectSysInfoConfig, err error) {
+	// get
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	resp, err := client.Get(ctx, key)
+	defer cancel()
+	if err != nil {
+		log.Errorf("get system info config from etcd failed, err:%v\n", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		log.Warnf("can't get any value by key:%s from etcd", key)
+		return
+	}
+	keyValues := resp.Kvs[0]
+	err = json.Unmarshal(keyValues.Value, &conf)
+	if err != nil {
+		log.Errorf("unmarshal value from etcd failed, err:%v", err)
+		return
+	}
+	log.Debugf("load conf from etcd success, conf:%#v", conf)
+	return
+}
+
+// WatchConf watch etcd for collect log conf change
+func WatchConf(key string) {
 	for {
 		rch := client.Watch(context.Background(), key) // <-chan WatchResponse
 		log.Debugf("watch return, rch:%#v", rch)

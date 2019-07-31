@@ -26,7 +26,9 @@ require (
 	github.com/jonboulle/clockwork v0.1.0 // indirect
 	github.com/pierrec/lz4 v2.2.4+incompatible // indirect
 	github.com/prometheus/client_golang v1.0.0 // indirect
+	github.com/prometheus/common v0.4.1
 	github.com/rcrowley/go-metrics v0.0.0-20190706150252-9beb055b7962 // indirect
+	github.com/shirou/gopsutil v2.19.6+incompatible
 	github.com/sirupsen/logrus v1.4.2
 	github.com/smartystreets/goconvey v0.0.0-20190710185942-9d28bd7c0945 // indirect
 	github.com/soheilhy/cmux v0.1.4 // indirect

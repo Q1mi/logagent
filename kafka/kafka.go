@@ -17,7 +17,7 @@ var (
 
 // Message 发送到kafka的message
 type Message struct {
-	Line  string
+	Data  string
 	Topic string
 }
 
@@ -68,12 +68,12 @@ func sendKafka() {
 	for msg := range msgChan {
 		kafkaMsg := &sarama.ProducerMessage{}
 		kafkaMsg.Topic = msg.Topic
-		kafkaMsg.Value = sarama.StringEncoder(msg.Line)
+		kafkaMsg.Value = sarama.StringEncoder(msg.Data)
 		pid, offset, err := client.SendMessage(kafkaMsg)
 		if err != nil {
 			log.Warnf("send msg failed, err:%v\n", err)
 			continue
 		}
-		log.Infof("send msg succee, pid:%v offset:%v\n", pid, offset)
+		log.Infof("send msg success, pid:%v offset:%v\n", pid, offset)
 	}
 }

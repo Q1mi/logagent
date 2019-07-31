@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"github.com/go-ini/ini"
 	"github.com/sirupsen/logrus"
+	"logagent/common"
 	"logagent/etcd"
 	"logagent/kafka"
+	"logagent/sysinfo"
 	"logagent/tailfile"
 	"logagent/utils"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +20,7 @@ import (
 
 var (
 	log *logrus.Logger
+	wg sync.WaitGroup
 )
 
 type config struct {
@@ -37,7 +41,9 @@ type CollectConfig struct {
 type EtcdConfig struct {
 	Address    string `ini:"address"`
 	CollectLogKey string `ini:"collect_log_key"`
+	CollectSysInfoKey string `ini:"collect_sysinfo_key"`
 }
+
 
 func initLogger() {
 	log = logrus.New()
@@ -56,12 +62,12 @@ func initLogger() {
 }
 
 // 业务逻辑处理
-func run() (err error) {
+func run(logConfKey string, sysinfoConf *common.CollectSysInfoConfig) {
 	// 实时监控etcd中日志收集配置项的变化，对tailObj进行管理
-	for {
-		time.Sleep(time.Second)
-	}
-	return
+	wg.Add(2)
+	go etcd.WatchConf(logConfKey)
+	go sysinfo.Run(time.Duration(sysinfoConf.Interval)*time.Second, sysinfoConf.Topic)
+	wg.Wait()
 }
 
 func main() {
@@ -83,6 +89,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("get local ip failed, err:%v", err))
 	}
+	// 根据本机IP获取要收集日志的配置
 	collectLogKey := fmt.Sprintf(cfg.EtcdConfig.CollectLogKey, ip)
 	err = etcd.Init(strings.Split(cfg.EtcdConfig.Address, ","), collectLogKey)
 	if err != nil {
@@ -90,25 +97,36 @@ func main() {
 	}
 	log.Debug("init etcd success!")
 
-	collectConf, err := etcd.GetConf(collectLogKey)
+	collectLogConf, err := etcd.GetConf(collectLogKey)
 	if err != nil {
 		panic(fmt.Sprintf("get collect conf from etcd failed, err:%v", err))
 	}
-	log.Debugf("%#v", collectConf)
+	log.Debugf("%#v", collectLogConf)
+
+	// 根据本机IP获取要收集系统信息的配置
+	collectSysinfoKey := fmt.Sprintf(cfg.EtcdConfig.CollectSysInfoKey, ip)
+	collectSysinfoConf, err := etcd.GetSysinfoConf(collectSysinfoKey)
+	if err != nil {
+		panic(fmt.Sprintf("get collect sys info conf from etcd failed, err:%v", err))
+	}
+	if collectSysinfoConf == nil {
+		collectSysinfoConf = &common.CollectSysInfoConfig{
+			Interval:5,
+			Topic:"collect_system_info",
+		}
+	}
+	log.Debugf("%#v", collectSysinfoConf)
 
 	// 获取一个新日志配置项的chan
 	newConfChan := etcd.WatchChan()
 	// 4. 初始化tail
-	err = tailfile.Init(collectConf, newConfChan) // 此处为修改后的Init
+	err = tailfile.Init(collectLogConf, newConfChan) // 此处为修改后的Init
 	if err != nil {
 		panic(fmt.Sprintf("init tail failed, err:%v", err))
 	}
 	log.Debug("init tail success!")
 
 	// 5. 开始干活
-	err = run()
-	if err != nil {
-		panic(fmt.Sprintf("main.run failed, err:%v", err))
-	}
+	run(collectLogKey, collectSysinfoConf)
 	log.Debug("logagent exit")
 }
