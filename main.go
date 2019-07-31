@@ -7,6 +7,7 @@ import (
 	"logagent/etcd"
 	"logagent/kafka"
 	"logagent/tailfile"
+	"logagent/utils"
 	"os"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ type CollectConfig struct {
 
 type EtcdConfig struct {
 	Address    string `ini:"address"`
-	CollectKey string `ini:"collect_key"`
+	CollectLogKey string `ini:"collect_log_key"`
 }
 
 func initLogger() {
@@ -78,13 +79,18 @@ func main() {
 	}
 
 	// 3. 初始化etcd
-	err = etcd.Init(strings.Split(cfg.EtcdConfig.Address, ","), cfg.EtcdConfig.CollectKey)
+	ip, err := utils.GetOutboundIP()
+	if err != nil {
+		panic(fmt.Sprintf("get local ip failed, err:%v", err))
+	}
+	collectLogKey := fmt.Sprintf(cfg.EtcdConfig.CollectLogKey, ip)
+	err = etcd.Init(strings.Split(cfg.EtcdConfig.Address, ","), collectLogKey)
 	if err != nil {
 		panic(fmt.Sprintf("init etcd failed, err:%v", err))
 	}
 	log.Debug("init etcd success!")
 
-	collectConf, err := etcd.GetConf(cfg.EtcdConfig.CollectKey)
+	collectConf, err := etcd.GetConf(collectLogKey)
 	if err != nil {
 		panic(fmt.Sprintf("get collect conf from etcd failed, err:%v", err))
 	}
