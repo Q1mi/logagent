@@ -4,22 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"logagent/common"
+	"logagent/kafka"
+	"os"
+
 	"github.com/hpcloud/tail"
 	"github.com/sirupsen/logrus"
-	"logagent/kafka"
-	"logagent/utils"
-	"os"
 )
 
 // tail line from log file
 var (
-	log *logrus.Logger
+	log     *logrus.Logger
 	localIP string
 )
 
-
 type LogData struct {
-	IP string `json:"ip"`
+	IP   string `json:"ip"`
 	Data string `json:"data"`
 }
 
@@ -38,7 +38,7 @@ func init() {
 
 	log.Info("etcd:init log success")
 	var err error
-	localIP, err = utils.GetOutboundIP()
+	localIP, err = common.GetOutboundIP()
 	if err != nil {
 		log.Errorf("get local ip failed,err:%v", err)
 	}
@@ -88,6 +88,7 @@ func (t *tailObj) run() {
 		select {
 		case <-t.ctx.Done():
 			log.Warnf("the task for path:%s is stop...", t.path)
+			t.instance.Cleanup()
 			return // 函数返回对应的goroutine就结束了
 		case line, ok := <-t.instance.Lines:
 			if !ok {
@@ -95,7 +96,7 @@ func (t *tailObj) run() {
 				continue
 			}
 			data := &LogData{
-				IP:localIP,
+				IP:   localIP,
 				Data: line.Text,
 			}
 			jsonData, err := json.Marshal(data)

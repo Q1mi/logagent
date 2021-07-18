@@ -3,24 +3,25 @@ package sysinfo
 import (
 	"encoding/json"
 	"fmt"
+	"logagent/kafka"
+	"time"
+
 	"github.com/prometheus/common/log"
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/net"
-	"logagent/kafka"
-	"time"
-	"github.com/shirou/gopsutil/cpu"
 )
 
 var (
-	lastNetIOStatTimeStamp int64 // 上一次获取网络IO数据的时间点
-	lastNetInfo *NetInfo // 上一次的网络IO数据
-	collectSysInfoTopic string
+	lastNetIOStatTimeStamp int64    // 上一次获取网络IO数据的时间点
+	lastNetInfo            *NetInfo // 上一次的网络IO数据
+	collectSysInfoTopic    string
 )
 
 // 收集系统信息汇报到kafka
 
-func getCpuInfo(){
+func getCpuInfo() {
 	var cpuInfo = new(CpuInfo)
 	// CPU使用率
 	percent, _ := cpu.Percent(time.Second, false)
@@ -30,8 +31,7 @@ func getCpuInfo(){
 	sendKafka(cpuInfo)
 }
 
-
-func getMemInfo(){
+func getMemInfo() {
 	var memInfo = new(MemInfo)
 	info, err := mem.VirtualMemory()
 	if err != nil {
@@ -47,39 +47,38 @@ func getMemInfo(){
 	sendKafka(memInfo)
 }
 
-
-func getDiskInfo(){
+func getDiskInfo() {
 	var diskInfo = &DiskInfo{
-		PartitionUsageStat:make(map[string]*UsageStat, 16),
+		PartitionUsageStat: make(map[string]*UsageStat, 16),
 	}
 	parts, _ := disk.Partitions(true)
-	for _, part := range parts{
+	for _, part := range parts {
 		// 拿到每一个分区
-		usageStatInfo , err := disk.Usage(part.Mountpoint) // 传挂载点
+		usageStatInfo, err := disk.Usage(part.Mountpoint) // 传挂载点
 		if err != nil {
 			fmt.Printf("get %s usage stat failed, err:%v", err)
 			continue
 		}
 		usageStat := &UsageStat{
-			Path:usageStatInfo.Path,
-			Fstype:usageStatInfo.Fstype,
-			Total:usageStatInfo.Total,
-			Free:usageStatInfo.Free,
-			Used:usageStatInfo.Used,
-			UsedPercent:usageStatInfo.UsedPercent,
-			InodesTotal:usageStatInfo.InodesTotal,
-			InodesUsed:usageStatInfo.InodesUsed,
-			InodesFree:usageStatInfo.InodesFree,
-			InodesUsedPercent:usageStatInfo.InodesUsedPercent,
+			Path:              usageStatInfo.Path,
+			Fstype:            usageStatInfo.Fstype,
+			Total:             usageStatInfo.Total,
+			Free:              usageStatInfo.Free,
+			Used:              usageStatInfo.Used,
+			UsedPercent:       usageStatInfo.UsedPercent,
+			InodesTotal:       usageStatInfo.InodesTotal,
+			InodesUsed:        usageStatInfo.InodesUsed,
+			InodesFree:        usageStatInfo.InodesFree,
+			InodesUsedPercent: usageStatInfo.InodesUsedPercent,
 		}
 		diskInfo.PartitionUsageStat[part.Mountpoint] = usageStat
 	}
 	sendKafka(diskInfo)
 }
 
-func getNetInfo(){
+func getNetInfo() {
 	var netInfo = &NetInfo{
-		NetIOCountersStat:make(map[string]*IOStat, 8),
+		NetIOCountersStat: make(map[string]*IOStat, 8),
 	}
 	currentTimeStamp := time.Now().Unix()
 	netIOs, err := net.IOCounters(true)
@@ -87,7 +86,7 @@ func getNetInfo(){
 		fmt.Printf("get net io counters failed, err:%v", err)
 		return
 	}
-	for _, netIO := range netIOs{
+	for _, netIO := range netIOs {
 		var ioStat = new(IOStat)
 		ioStat.BytesSent = netIO.BytesSent
 		ioStat.BytesRecv = netIO.BytesRecv
@@ -103,10 +102,10 @@ func getNetInfo(){
 		// 计算时间间隔
 		interval := currentTimeStamp - lastNetIOStatTimeStamp
 		// 计算速率
-		ioStat.BytesSentRate = (float64(ioStat.BytesSent) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].BytesSent))/float64(interval)
-		ioStat.BytesRecvRate = (float64(ioStat.BytesRecv) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].BytesRecv))/float64(interval)
-		ioStat.PacketsSentRate = (float64(ioStat.PacketsSent) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].PacketsSent))/float64(interval)
-		ioStat.PacketsRecvRate = (float64(ioStat.PacketsRecv) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].PacketsRecv))/float64(interval)
+		ioStat.BytesSentRate = (float64(ioStat.BytesSent) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].BytesSent)) / float64(interval)
+		ioStat.BytesRecvRate = (float64(ioStat.BytesRecv) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].BytesRecv)) / float64(interval)
+		ioStat.PacketsSentRate = (float64(ioStat.PacketsSent) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].PacketsSent)) / float64(interval)
+		ioStat.PacketsRecvRate = (float64(ioStat.PacketsRecv) - float64(lastNetInfo.NetIOCountersStat[netIO.Name].PacketsRecv)) / float64(interval)
 
 	}
 	// 更新全局记录的上一次采集网卡的时间点和网卡数据
@@ -115,15 +114,14 @@ func getNetInfo(){
 	sendKafka(netInfo)
 }
 
-
 func sendKafka(data interface{}) {
-	jsonData, err:= json.Marshal(data)
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return
 	}
 	kafkaMsg := &kafka.Message{
-	Topic: collectSysInfoTopic,
-	Data: string(jsonData),
+		Topic: collectSysInfoTopic,
+		Data:  string(jsonData),
 	}
 	err = kafka.SendLog(kafkaMsg)
 	if err != nil {
@@ -133,14 +131,13 @@ func sendKafka(data interface{}) {
 	log.Info("send collect sys info msg")
 
 }
-func Run(interval time.Duration, topic string){
+func Run(interval time.Duration, topic string) {
 	collectSysInfoTopic = topic
 	ticker := time.Tick(interval)
-	for _ = range ticker{
+	for _ = range ticker {
 		getCpuInfo()
 		getMemInfo()
 		getDiskInfo()
 		getNetInfo()
 	}
 }
-

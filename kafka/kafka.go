@@ -59,7 +59,7 @@ func SendLog(msg *Message) (err error) {
 	select {
 	case msgChan <- msg:
 	default:
-		err = fmt.Errorf("msgChan id full")
+		err = fmt.Errorf("msgChan is full")
 	}
 	return
 }

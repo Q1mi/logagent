@@ -9,7 +9,6 @@ import (
 	"logagent/kafka"
 	"logagent/sysinfo"
 	"logagent/tailfile"
-	"logagent/utils"
 	"os"
 	"strings"
 	"sync"
@@ -20,7 +19,7 @@ import (
 
 var (
 	log *logrus.Logger
-	wg sync.WaitGroup
+	wg  sync.WaitGroup
 )
 
 type config struct {
@@ -39,11 +38,10 @@ type CollectConfig struct {
 }
 
 type EtcdConfig struct {
-	Address    string `ini:"address"`
-	CollectLogKey string `ini:"collect_log_key"`
+	Address           string `ini:"address"`
+	CollectLogKey     string `ini:"collect_log_key"`
 	CollectSysInfoKey string `ini:"collect_sysinfo_key"`
 }
-
 
 func initLogger() {
 	log = logrus.New()
@@ -85,7 +83,7 @@ func main() {
 	}
 
 	// 3. 初始化etcd
-	ip, err := utils.GetOutboundIP()
+	ip, err := common.GetOutboundIP()
 	if err != nil {
 		panic(fmt.Sprintf("get local ip failed, err:%v", err))
 	}
@@ -111,8 +109,8 @@ func main() {
 	}
 	if collectSysinfoConf == nil {
 		collectSysinfoConf = &common.CollectSysInfoConfig{
-			Interval:5,
-			Topic:"collect_system_info",
+			Interval: 5,
+			Topic:    "collect_system_info",
 		}
 	}
 	log.Debugf("%#v", collectSysinfoConf)
